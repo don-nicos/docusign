@@ -1,10 +1,8 @@
 -- =============================================================================
 -- SIGNATURE SERVICE - INITIAL SCHEMA
 -- =============================================================================
--- Esquema consolidado con la última versión de todas las tablas
--- Incluye datos de prueba con userId determinístico
 
--- Habilitar extensiones necesarias
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =============================================================================
@@ -12,24 +10,30 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS signature_requests (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
-    owner_id VARCHAR(255) NOT NULL,
-    title VARCHAR(255) NOT NULL,
     document_id UUID NOT NULL,
-    status VARCHAR(50) NOT NULL,
+    owner_id UUID NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    status VARCHAR(32) NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     document_hash VARCHAR(64),
-    viewer_width INTEGER,
     signed_pdf_path VARCHAR(500),
-    magic_link_expiration_days INTEGER DEFAULT 7,
+    pdf_viewer_width INTEGER,
+    trace_id VARCHAR(36),
+    organization_id UUID,
+    is_organization_request BOOLEAN DEFAULT FALSE NOT NULL,
+    magic_link_expiration_days INTEGER DEFAULT 7 NOT NULL,
+    last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
+    reminder_count INTEGER DEFAULT 0 NOT NULL,
+    auto_reminders_enabled BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     CONSTRAINT signature_requests_pkey PRIMARY KEY (id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_signature_requests_document_id ON signature_requests(document_id);
 CREATE INDEX IF NOT EXISTS idx_signature_requests_owner_id ON signature_requests(owner_id);
 CREATE INDEX IF NOT EXISTS idx_signature_requests_status ON signature_requests(status);
-CREATE INDEX IF NOT EXISTS idx_signature_requests_document_id ON signature_requests(document_id);
 
 -- =============================================================================
 -- TABLA: signers
@@ -38,14 +42,27 @@ CREATE TABLE IF NOT EXISTS signers (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     signature_request_id UUID NOT NULL,
     email VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    rut VARCHAR(20),
-    rut_is_verified BOOLEAN DEFAULT FALSE,
-    status VARCHAR(50) NOT NULL,
-    turn_order INTEGER NOT NULL,
-    signature_image_path VARCHAR(500),
+    full_name VARCHAR(120) NOT NULL,
+    order_index INTEGER DEFAULT 0 NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    otp_code VARCHAR(16),
+    otp_expires_at TIMESTAMP WITH TIME ZONE,
+    otp_last_sent_at TIMESTAMP WITH TIME ZONE,
     signed_at TIMESTAMP WITH TIME ZONE,
-    access_token VARCHAR(500),
+    signature_image_path VARCHAR(500),
+    signature_position_x DOUBLE PRECISION,
+    signature_position_y DOUBLE PRECISION,
+    signature_page INTEGER,
+    signature_width DOUBLE PRECISION,
+    signature_height DOUBLE PRECISION,
+    rejection_reason VARCHAR(255),
+    signer_ip_address VARCHAR(64),
+    authentication_method VARCHAR(32),
+    signer_user_agent VARCHAR(500),
+    rut VARCHAR(20),
+    rut_verified BOOLEAN DEFAULT FALSE NOT NULL,
+    trace_id VARCHAR(36),
+    access_token VARCHAR(64),
     access_token_expires_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
@@ -63,11 +80,12 @@ CREATE INDEX IF NOT EXISTS idx_signers_status ON signers(status);
 CREATE TABLE IF NOT EXISTS signature_positions (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     signer_id UUID NOT NULL,
-    page INTEGER NOT NULL,
-    x DOUBLE PRECISION NOT NULL,
-    y DOUBLE PRECISION NOT NULL,
+    page_number INTEGER NOT NULL,
+    position_x DOUBLE PRECISION NOT NULL,
+    position_y DOUBLE PRECISION NOT NULL,
     width DOUBLE PRECISION NOT NULL,
     height DOUBLE PRECISION NOT NULL,
+    label VARCHAR(255),
     CONSTRAINT signature_positions_pkey PRIMARY KEY (id),
     CONSTRAINT signature_positions_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
 );
@@ -81,12 +99,19 @@ CREATE TABLE IF NOT EXISTS pdf_versions (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     signature_request_id UUID NOT NULL,
     version_number INTEGER NOT NULL,
-    pdf_path VARCHAR(500) NOT NULL,
-    created_by_signer_id UUID,
+    file_path VARCHAR(500) NOT NULL,
+    document_hash VARCHAR(64) NOT NULL,
+    signed_by VARCHAR(200),
+    signer_id UUID,
+    signatures_count INTEGER DEFAULT 0 NOT NULL,
+    total_signers INTEGER DEFAULT 0 NOT NULL,
+    is_final BOOLEAN DEFAULT FALSE NOT NULL,
+    has_certificate BOOLEAN DEFAULT FALSE NOT NULL,
+    file_size_bytes BIGINT DEFAULT 0 NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     CONSTRAINT pdf_versions_pkey PRIMARY KEY (id),
     CONSTRAINT pdf_versions_signature_request_id_fkey FOREIGN KEY (signature_request_id) REFERENCES signature_requests(id) ON DELETE CASCADE,
-    CONSTRAINT pdf_versions_created_by_signer_id_fkey FOREIGN KEY (created_by_signer_id) REFERENCES signers(id) ON DELETE SET NULL
+    CONSTRAINT pdf_versions_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_pdf_versions_signature_request_id ON pdf_versions(signature_request_id);
@@ -97,17 +122,17 @@ CREATE INDEX IF NOT EXISTS idx_pdf_versions_version_number ON pdf_versions(signa
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS reminder_tracking (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
-    signature_request_id UUID NOT NULL,
-    signer_id UUID,
-    reminder_type VARCHAR(50) NOT NULL,
-    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    signer_id UUID NOT NULL,
+    reminder_count INTEGER DEFAULT 0 NOT NULL,
+    last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     CONSTRAINT reminder_tracking_pkey PRIMARY KEY (id),
-    CONSTRAINT reminder_tracking_signature_request_id_fkey FOREIGN KEY (signature_request_id) REFERENCES signature_requests(id) ON DELETE CASCADE,
     CONSTRAINT reminder_tracking_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_reminder_tracking_signature_request_id ON reminder_tracking(signature_request_id);
 CREATE INDEX IF NOT EXISTS idx_reminder_tracking_signer_id ON reminder_tracking(signer_id);
+CREATE INDEX IF NOT EXISTS idx_reminder_tracking_last_sent ON reminder_tracking(last_reminder_sent_at);
 
 -- =============================================================================
 -- TABLA: user_signatures
@@ -124,26 +149,29 @@ CREATE TABLE IF NOT EXISTS user_signatures (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_signatures_user_id ON user_signatures(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_signatures_user_default ON user_signatures(user_id, is_default) WHERE is_default = TRUE;
+CREATE INDEX IF NOT EXISTS idx_user_signatures_created_at ON user_signatures(created_at);
 
 -- =============================================================================
 -- TABLA: audit_logs
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
-    entity_type VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(64) NOT NULL,
     entity_id UUID NOT NULL,
-    action VARCHAR(100) NOT NULL,
+    action VARCHAR(64) NOT NULL,
     actor_id UUID,
-    metadata_json TEXT,
+    ip VARCHAR(64),
+    user_agent VARCHAR(512),
+    metadata JSONB,
+    trace_id VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_type ON audit_logs(entity_type);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_type_entity_id ON audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_trace_id ON audit_logs(trace_id);
 
 -- =============================================================================
 -- TABLA: http_integration_logs
@@ -172,7 +200,7 @@ CREATE INDEX IF NOT EXISTS idx_http_integration_logs_created_at ON http_integrat
 CREATE INDEX IF NOT EXISTS idx_http_integration_logs_trace_id ON http_integration_logs(trace_id);
 
 -- =============================================================================
--- TABLA: shedlock (para scheduled tasks)
+-- TABLA: shedlock
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS shedlock (
     name VARCHAR(64) NOT NULL,
@@ -185,9 +213,7 @@ CREATE TABLE IF NOT EXISTS shedlock (
 -- =============================================================================
 -- FUNCIÓN: generate_user_id_from_email
 -- =============================================================================
--- Genera un UUID determinístico a partir de un email
--- IMPORTANTE: Debe usar el MISMO algoritmo que auth-service
-CREATE OR REPLACE FUNCTION generate_user_id_from_email(email_param TEXT) 
+CREATE OR REPLACE FUNCTION generate_user_id_from_email(email_param TEXT)
 RETURNS UUID AS $$
 DECLARE
     namespace_uuid UUID := '6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID;
@@ -200,8 +226,6 @@ $$ LANGUAGE plpgsql;
 -- =============================================================================
 -- DATOS INICIALES: Firmas de usuario de prueba
 -- =============================================================================
-
--- Firma de Felipe Ibacache
 INSERT INTO user_signatures (id, user_id, signature_image_path, name, is_default, created_at, updated_at)
 VALUES (
     gen_random_uuid(),
@@ -211,9 +235,8 @@ VALUES (
     TRUE,
     NOW(),
     NOW()
-);
+) ON CONFLICT DO NOTHING;
 
--- Firma de Laura Rodríguez
 INSERT INTO user_signatures (id, user_id, signature_image_path, name, is_default, created_at, updated_at)
 VALUES (
     gen_random_uuid(),
@@ -223,9 +246,8 @@ VALUES (
     TRUE,
     NOW(),
     NOW()
-);
+) ON CONFLICT DO NOTHING;
 
--- Firma de Admin
 INSERT INTO user_signatures (id, user_id, signature_image_path, name, is_default, created_at, updated_at)
 VALUES (
     gen_random_uuid(),
@@ -235,18 +257,4 @@ VALUES (
     TRUE,
     NOW(),
     NOW()
-);
-
--- =============================================================================
--- FIN DEL ESQUEMA SIGNATURE SERVICE
--- =============================================================================
--- 
--- Usuarios de prueba (definidos en auth-service):
--- felipe.ibacache@docusing.cl / password123
--- laura.rodriguez@empresa.cl / password123
--- admin@docusing.cl / admin123
--- test@docusing.cl / test123
---
--- Todos los userId se generan determinísticamente desde el email
--- usando el mismo algoritmo que auth-service
--- =============================================================================
+) ON CONFLICT DO NOTHING;

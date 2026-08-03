@@ -3,6 +3,7 @@ package com.docusing.signature.common.web
 object ExternalRoutes {
     object Auth {
         const val GET_MY_ROLE = "/api/organizations/{organizationId}/my-role"
+        const val GET_USER = "/api/users/{userId}"
     }
 
     object Documents {

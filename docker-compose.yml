@@ -87,6 +87,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/docusing_signature
       - SPRING_DATASOURCE_USERNAME=docusing
       - SPRING_DATASOURCE_PASSWORD=docusing
+      - AUTH_SERVICE_BASE_URL=http://auth-service:8081
       - DOCUMENT_SERVICE_BASE_URL=http://document-service:8082
       - NOTIFICATION_SERVICE_BASE_URL=http://notification-service:8084
       - PAYMENT_SERVICE_BASE_URL=http://payment-service:8085

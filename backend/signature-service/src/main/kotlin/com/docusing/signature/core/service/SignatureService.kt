@@ -506,9 +506,12 @@ class SignatureService(
             }
             
             runCatching {
+                val ownerEmail = runCatching {
+                    authFeignClient.getUserById(request.ownerId)["email"] as? String
+                }.getOrNull()
                 notificationFeignClient.sendSignatureCompletedNotification(
                     SignatureCompletedRequest(
-                        email = request.ownerId.toString(),
+                        email = ownerEmail ?: request.ownerId.toString(),
                         documentTitle = request.title
                     )
                 )

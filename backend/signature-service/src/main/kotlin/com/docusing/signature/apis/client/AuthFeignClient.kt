@@ -16,4 +16,7 @@ interface AuthFeignClient {
         @PathVariable organizationId: UUID,
         @RequestHeader(ApiHeaders.USER_ID) userId: String
     ): Map<String, String?>
+
+    @GetMapping(ExternalRoutes.Auth.GET_USER)
+    fun getUserById(@PathVariable("userId") userId: UUID): Map<String, Any?>
 }
