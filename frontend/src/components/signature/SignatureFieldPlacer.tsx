@@ -7,6 +7,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
+import { PDF_VIEWER_WIDTH } from '@/lib/pdfConstants'
 
 // Configurar worker de PDF.js
 if (typeof window !== 'undefined') {
@@ -43,7 +44,6 @@ export function SignatureFieldPlacer({
   const [selectedSigner, setSelectedSigner] = useState<string>(signers[0]?.id || '')
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
-  const [pageScale, setPageScale] = useState(1)
   const [resizingField, setResizingField] = useState<number | null>(null)
   const [resizeStart, setResizeStart] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [movingField, setMovingField] = useState<number | null>(null)
@@ -52,15 +52,33 @@ export function SignatureFieldPlacer({
   const [pageOffset, setPageOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
   const pdfContainerRef = useRef<HTMLDivElement>(null)
-  const pageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     onFieldsChange(fields)
-  }, [fields])
+  }, [fields, onFieldsChange])
+
+  useEffect(() => {
+    const handleResize = () => computePageOffset()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages)
     setPdfLoadError('')
+  }
+
+  const computePageOffset = () => {
+    const pageElement = document.querySelector('.react-pdf__Page')
+    const container = pdfContainerRef.current
+    if (pageElement && container) {
+      const pageRect = pageElement.getBoundingClientRect()
+      const containerRect = container.getBoundingClientRect()
+      setPageOffset({
+        x: pageRect.left - containerRect.left,
+        y: pageRect.top - containerRect.top
+      })
+    }
   }
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -78,20 +96,6 @@ export function SignatureFieldPlacer({
 
     setIsDragging(true)
     setDragStart({ x, y })
-  }
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !dragStart) return
-
-    // Visual feedback mientras arrastra (opcional)
-    const container = pdfContainerRef.current
-    if (!container) return
-
-    const rect = container.getBoundingClientRect()
-    const currentX = e.clientX - rect.left
-    const currentY = e.clientY - rect.top
-
-    // Aquí podrías mostrar un rectángulo de preview
   }
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -160,14 +164,14 @@ export function SignatureFieldPlacer({
   const handleResizeStart = (e: React.MouseEvent, fieldIndex: number) => {
     e.stopPropagation()
     e.preventDefault()
-    
+
     const field = fields[fieldIndex]
     const container = pdfContainerRef.current
     if (!container) return
 
     const rect = container.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const x = e.clientX - rect.left - pageOffset.x
+    const y = e.clientY - rect.top - pageOffset.y
 
     setResizingField(fieldIndex)
     setResizeStart({
@@ -313,7 +317,7 @@ export function SignatureFieldPlacer({
             Selecciona firmante para posicionar campo:
           </label>
           <div className="flex flex-wrap gap-2">
-            {signers.map((signer, index) => {
+            {signers.map(signer => {
               const hasField = fields.some(f => f.signerId === signer.id)
               return (
                 <button
@@ -390,7 +394,6 @@ export function SignatureFieldPlacer({
           className="relative cursor-crosshair flex justify-center"
           onMouseDown={handleMouseDown}
           onMouseMove={(e) => {
-            handleMouseMove(e)
             handleResizeMove(e)
             handleMoveMove(e)
           }}
@@ -419,33 +422,18 @@ export function SignatureFieldPlacer({
               </div>
             }
           >
-            <Page 
+            <Page
               pageNumber={currentPage}
               renderTextLayer={false}
               renderAnnotationLayer={false}
-              width={Math.min(800, window.innerWidth - 100)}
+              width={PDF_VIEWER_WIDTH}
               onLoadSuccess={(page) => {
-                const scale = page.width / page.originalWidth
-                setPageScale(scale)
                 // Guardar dimensiones de la página renderizada para validación
                 setPageDimensions({
                   width: page.width,
                   height: page.height
                 })
-                
-                // Calcular offset de la página dentro del contenedor
-                setTimeout(() => {
-                  const pageElement = document.querySelector('.react-pdf__Page')
-                  const container = pdfContainerRef.current
-                  if (pageElement && container) {
-                    const pageRect = pageElement.getBoundingClientRect()
-                    const containerRect = container.getBoundingClientRect()
-                    setPageOffset({
-                      x: pageRect.left - containerRect.left,
-                      y: pageRect.top - containerRect.top
-                    })
-                  }
-                }, 100)
+                computePageOffset()
               }}
             />
           </Document>

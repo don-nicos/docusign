@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { SignatureFieldPlacer } from '@/components/signature/SignatureFieldPlacer'
 import { documentApi, paymentApi, signatureApi, userApi } from '@/lib/api'
 import { API_CONFIG } from '@/lib/config'
+import { PDF_VIEWER_WIDTH } from '@/lib/pdfConstants'
 import type { Document, SignatureRequest, ApiError, CreateSignatureRequestPayload, User } from '@/types'
 
 interface SignerInput {
@@ -60,9 +61,38 @@ export default function CreateSignaturePage() {
   const [loading, setLoading] = useState(false)
   const [loadingDoc, setLoadingDoc] = useState(true)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [currentStep, setCurrentStep] = useState<'signers' | 'positions'>('signers')
   const [signatureFields, setSignatureFields] = useState<SignatureField[]>([])
+
+  const loadSubscriptionAccess = useCallback(async () => {
+    try {
+      setLoadingAccess(true)
+      const [count, subscription] = await Promise.all([
+        documentApi.count(),
+        paymentApi.getMySubscription(),
+      ])
+      const active = subscription?.subscription?.status === 'ACTIVE'
+      setHasAccessToCreate(count.count <= 3 || active)
+    } catch {
+      setHasAccessToCreate(false)
+    } finally {
+      setLoadingAccess(false)
+    }
+  }, [])
+
+  const loadDocument = useCallback(async () => {
+    try {
+      setLoadingDoc(true)
+      const docData = await documentApi.getById(id as string) as Document
+      setDocument(docData)
+      setTitle(`Solicitud de firma: ${docData.title}`)
+    } catch (err) {
+      const apiError = err as ApiError
+      setError(apiError.message || 'Error al cargar el documento')
+    } finally {
+      setLoadingDoc(false)
+    }
+  }, [id, setError, setDocument, setTitle, setLoadingDoc])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -75,37 +105,7 @@ export default function CreateSignaturePage() {
     if (id) {
       loadDocument()
     }
-  }, [id, isAuthenticated])
-
-  const loadSubscriptionAccess = async () => {
-    try {
-      setLoadingAccess(true)
-      const [count, subscription] = await Promise.all([
-        documentApi.count(),
-        paymentApi.getMySubscription(),
-      ])
-      const active = subscription?.subscription?.status === 'ACTIVE'
-      setHasAccessToCreate(count.count <= 3 || active)
-    } catch (err) {
-      setHasAccessToCreate(false)
-    } finally {
-      setLoadingAccess(false)
-    }
-  }
-
-  const loadDocument = async () => {
-    try {
-      setLoadingDoc(true)
-      const docData = await documentApi.getById(id as string) as Document
-      setDocument(docData)
-      setTitle(`Solicitud de firma: ${docData.title}`)
-    } catch (err) {
-      const apiError = err as ApiError
-      setError(apiError.message || 'Error al cargar el documento')
-    } finally {
-      setLoadingDoc(false)
-    }
-  }
+  }, [id, isAuthenticated, loadDocument, loadSubscriptionAccess, router])
 
   const addSigner = () => {
     setSigners([...signers, { email: '', fullName: '' }])
@@ -119,8 +119,11 @@ export default function CreateSignaturePage() {
 
   const updateSigner = async (index: number, field: keyof SignerInput, value: string | number) => {
     const updated = [...signers]
-    // @ts-ignore - Los campos pueden ser string o number
-    updated[index][field] = value
+    if (field === 'fullName' || field === 'email') {
+      updated[index][field] = value as string
+    } else {
+      updated[index][field] = value as number
+    }
     setSigners(updated)
 
     // Si se está actualizando el email, intentar autocompletar
@@ -176,9 +179,9 @@ export default function CreateSignaturePage() {
     setCurrentStep('positions')
   }
 
-  const handleFieldsChange = (fields: SignatureField[]) => {
+  const handleFieldsChange = useCallback((fields: SignatureField[]) => {
     setSignatureFields(fields)
-  }
+  }, [])
 
   const handleSubmit = async () => {
     setError('')
@@ -222,7 +225,7 @@ export default function CreateSignaturePage() {
         title,
         signers: signersWithPositions,
         expirationHours,
-        pdfViewerWidth: 800, // Ancho estándar usado en el visor
+        pdfViewerWidth: PDF_VIEWER_WIDTH,
       }
 
       console.log('Payload enviado:', JSON.stringify(payload, null, 2))
@@ -459,16 +462,12 @@ export default function CreateSignaturePage() {
                         `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/detect-fields/${id}`,
                         { method: 'POST' }
                       )
-                      const suggestions = await response.json()
-                      
-                      // Aplicar sugerencias (una por firmante)
-                      suggestions.slice(0, signers.length).forEach((suggestion: any, index: number) => {
-                        // Aquí se aplicarían las sugerencias al SignatureFieldPlacer
-                        // Por ahora solo mostramos un mensaje
-                      })
-                      
-                      setSuccess(`✨ ${suggestions.length} posiciones sugeridas`)
-                    } catch (err) {
+                      const data = await response.json()
+                      const suggestions = Array.isArray(data) ? data : []
+
+                      // Aplicar sugerencias (una por firmante) - pendiente de implementar
+                      suggestions.slice(0, signers.length).forEach(() => {})
+                    } catch {
                       setError('No se pudieron detectar campos automáticamente')
                     } finally {
                       setLoading(false)

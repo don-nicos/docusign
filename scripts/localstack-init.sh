@@ -1,37 +1,35 @@
 #!/bin/bash
 
-echo "Inicializando LocalStack S3..."
+set -e
 
-# Crear bucket para PDFs firmados
-awslocal s3 mb s3://docusing-signed-pdfs
+echo "Inicializando LocalStack S3 para Docusing..."
 
-# Crear bucket para imágenes de firmas
-awslocal s3 mb s3://docusing-signatures
+# Bucket unificado usado por los servicios en entorno local
+awslocal s3 mb s3://docusing-dev || true
 
-# Configurar CORS para los buckets
-awslocal s3api put-bucket-cors --bucket docusing-signed-pdfs --cors-configuration '{
-  "CORSRules": [
-    {
-      "AllowedOrigins": ["*"],
-      "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
-      "AllowedHeaders": ["*"],
-      "MaxAgeSeconds": 3000
-    }
-  ]
-}'
+# Buckets legados por si la configuración cae en valores por defecto
+awslocal s3 mb s3://docusing-signed-pdfs || true
+awslocal s3 mb s3://docusing-signatures || true
 
-awslocal s3api put-bucket-cors --bucket docusing-signatures --cors-configuration '{
-  "CORSRules": [
-    {
-      "AllowedOrigins": ["*"],
-      "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
-      "AllowedHeaders": ["*"],
-      "MaxAgeSeconds": 3000
-    }
-  ]
-}'
+put_cors() {
+  local bucket=$1
+  awslocal s3api put-bucket-cors --bucket "$bucket" --cors-configuration '{
+    "CORSRules": [
+      {
+        "AllowedOrigins": ["*"],
+        "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+        "AllowedHeaders": ["*"],
+        "MaxAgeSeconds": 3000
+      }
+    ]
+  }' || true
+}
 
-echo "Buckets S3 creados:"
+put_cors docusing-dev
+put_cors docusing-signed-pdfs
+put_cors docusing-signatures
+
+echo "Buckets S3 disponibles:"
 awslocal s3 ls
 
 echo "LocalStack S3 inicializado correctamente!"

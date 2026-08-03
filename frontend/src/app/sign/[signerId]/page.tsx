@@ -85,7 +85,7 @@ export default function SignDocumentPage() {
   const isAlreadySigned = currentSigner?.status === 'SIGNED'
   
   const signaturePositions = useSignaturePositions(
-    signerInfo?.signatureRequest.signers as any || [],
+    signerInfo?.signatureRequest.signers ?? [],
     (!isAlreadySigned && (tempSignatureDataUrl || signatureDataUrl)) ? {
       signerId,
       signatureDataUrl: tempSignatureDataUrl || signatureDataUrl

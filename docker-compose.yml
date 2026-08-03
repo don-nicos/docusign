@@ -58,14 +58,16 @@ services:
       - PAYMENT_SERVICE_BASE_URL=http://payment-service:8085
       - APP_FREE_TIER_MAX_DOCUMENTS=3
       - AWS_S3_REGION=${DOCUSING_S3_AWS_S3_REGION:-us-east-2}
-      - AWS_S3_ACCESS_KEY=${DOCUSING_S3_AWS_S3_ACCESS_KEY}
-      - AWS_S3_SECRET_KEY=${DOCUSING_S3_AWS_S3_SECRET_KEY}
+      - AWS_S3_ACCESS_KEY=${DOCUSING_S3_AWS_S3_ACCESS_KEY:-test}
+      - AWS_S3_SECRET_KEY=${DOCUSING_S3_AWS_S3_SECRET_KEY:-test}
+      - AWS_S3_ENDPOINT=http://localstack:4566
       - AWS_S3_BUCKET_DOCUMENTS=docusing-dev
     volumes:
       - document-data:/app/data/documents
     depends_on:
       - postgres
       - payment-service
+      - localstack
     networks:
       - docusing-network
 
@@ -91,12 +93,15 @@ services:
       - APP_FRONTEND_BASE_URL=${APP_FRONTEND_BASE_URL:-http://localhost:3000}
       - APP_FREE_TIER_MAX_DOCUMENTS=3
       - AWS_S3_REGION=${DOCUSING_S3_AWS_S3_REGION:-us-east-2}
-      - AWS_S3_ACCESS_KEY=${DOCUSING_S3_AWS_S3_ACCESS_KEY}
-      - AWS_S3_SECRET_KEY=${DOCUSING_S3_AWS_S3_SECRET_KEY}
+      - AWS_S3_ACCESS_KEY=${DOCUSING_S3_AWS_S3_ACCESS_KEY:-test}
+      - AWS_S3_SECRET_KEY=${DOCUSING_S3_AWS_S3_SECRET_KEY:-test}
+      - AWS_S3_ENDPOINT=http://localstack:4566
       - AWS_S3_BUCKET_SIGNED_PDFS=${DOCUSING_S3_AWS_S3_BUCKET_SIGNED_PDFS:-docusing-dev}
       - AWS_S3_BUCKET_SIGNATURES=${DOCUSING_S3_AWS_S3_BUCKET_SIGNATURES:-docusing-dev}
     depends_on:
       - postgres
+      - document-service
+      - localstack
     networks:
       - docusing-network
 
@@ -120,8 +125,10 @@ services:
       - SPRING_DATASOURCE_PASSWORD=docusing
       - NOTIFICATION_SERVICE_BASE_URL=http://notification-service:8084
       - AUTH_SERVICE_BASE_URL=http://auth-service:8081
+      - MERCADOPAGO_ENABLED=false
     depends_on:
       - postgres
+      - auth-service
     networks:
       - docusing-network
 
@@ -188,6 +195,28 @@ services:
     networks:
       - docusing-network
 
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - AWS_DEFAULT_REGION=us-east-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DEBUG=0
+    volumes:
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal s3 ls > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - docusing-network
+
 networks:
   docusing-network:
     driver: bridge
@@ -195,3 +224,4 @@ networks:
 volumes:
   document-data:
   pgdata:
+  localstack-data:

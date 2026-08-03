@@ -421,14 +421,31 @@ class SignatureService(
         try {
             logger.info { "Generando versión incremental del PDF después de firma de ${signer.fullName}" }
             val isComplete = allSignersSigned(request)
+
+            // El certificado necesita saber que la solicitud ya está completada
+            if (isComplete) {
+                request.completedAt = now
+                // Forzar recálculo del hash en el certificado para el documento final firmado
+                request.documentHash = null
+            }
+
             val pdfBytes = generateSignedPdf(request.id!!, addCertificate = isComplete)
-            
+
             // Calcular número de versión (cuenta cuántas versiones ya existen + 1)
             val existingVersionsCount = pdfVersionRepository.countBySignatureRequestId(request.id!!)
             val versionNumber = existingVersionsCount + 1
             val signedCount = request.signers.count { it.status == SignerStatus.SIGNED }
             val totalSigners = request.signers.size
-            
+
+            // El certificado ya calcula y persiste el hash del documento firmado (sin certificado).
+            // Para firmas parciales lo calculamos aquí.
+            val hash = if (isComplete) {
+                request.documentHash ?: generateDocumentHash(pdfBytes)
+            } else {
+                generateDocumentHash(pdfBytes)
+            }
+            request.documentHash = hash
+
             // Guardar versión del PDF con número de versión en S3
             // Estructura:
             // - user/{ownerId}/{requestId}/v{version}.pdf (sin organización)
@@ -441,10 +458,7 @@ class SignatureService(
                 organizationId = request.organizationId,
                 subCompanyId = null
             )
-            
-            // Calcular hash
-            val hash = generateDocumentHash(pdfBytes)
-            
+
             // Guardar registro de versión en BD
             val pdfVersion = com.docusing.signature.domain.model.PdfVersionEntity(
                 signatureRequest = request,
@@ -460,11 +474,10 @@ class SignatureService(
                 fileSizeBytes = pdfBytes.size.toLong()
             )
             pdfVersionRepository.save(pdfVersion)
-            
+
             // Actualizar referencia a la última versión en la solicitud
             request.signedPdfPath = s3Key
-            request.documentHash = hash
-            
+
             logger.info { "PDF versión $versionNumber guardado en S3: $s3Key, firmas: $signedCount/$totalSigners, final: $isComplete, hash: $hash" }
         } catch (e: Exception) {
             logger.error(e) { "Error al generar PDF incremental después de firma" }
@@ -822,51 +835,6 @@ class SignatureService(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Error al guardar la imagen de firma. Por favor, inténtelo nuevamente."
             )
-        }
-    }
-
-    private fun insertSignatureInDocument(request: SignatureRequestEntity, signer: SignerEntity) {
-        // Estandarizamos: re-generar el PDF con todas las firmas actuales y subirlo SIN CERTIFICADO
-        try {
-            val requestId = request.id ?: return
-            val merged = generateSignedPdf(requestId, addCertificate = false)
-            val multipartFile = ByteArrayMultipartFile("file", "signed.pdf", "application/pdf", merged)
-            documentFeignClient.uploadPdf(request.documentId, multipartFile)
-            // Audit
-            runCatching {
-                auditLogService.log(
-                    entityType = "SignatureRequest",
-                    entityId = requestId,
-                    action = "PDF_UPDATED_AFTER_SIGN",
-                    actorId = signer.id,
-                    metadataJson = "{\"signerId\":\"${signer.id}\"}"
-                )
-            }
-        } catch (e: Exception) {
-            logger.error(e) { "Error actualizando PDF tras firma de ${signer.fullName}" }
-        }
-    }
-
-    private fun insertAllSignaturesInDocument(request: SignatureRequestEntity) {
-        // Generar hash del documento final con todas las firmas para auditoría
-        try {
-            val pdfBytes = documentFeignClient.downloadPdf(request.documentId).body ?: throw IllegalStateException("No se pudo descargar el PDF")
-            request.documentHash = generateDocumentHash(pdfBytes)
-            signatureRequestRepository.save(request)
-            logger.info { "Solicitud ${request.id} completada con hash: ${request.documentHash}" }
-
-            // Audit
-            runCatching {
-                auditLogService.log(
-                    entityType = "SignatureRequest",
-                    entityId = request.id!!,
-                    action = "REQUEST_COMPLETED",
-                    actorId = request.ownerId,
-                    metadataJson = "{\"documentHash\":\"${request.documentHash}\"}"
-                )
-            }
-        } catch (e: Exception) {
-            logger.error(e) { "Error generando hash del documento final" }
         }
     }
 

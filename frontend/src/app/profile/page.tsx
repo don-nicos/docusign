@@ -10,6 +10,12 @@ import { SignatureModal } from '@/components/SignatureModal'
 import { userApi, savedSignatureApi } from '@/lib/api'
 import type { SavedSignature } from '@/types'
 
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  return 'Ocurrió un error inesperado'
+}
+
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading } = useAuth()
   const router = useRouter()
@@ -80,8 +86,8 @@ export default function ProfilePage() {
       })
       setSuccess('Perfil actualizado exitosamente')
       setIsEditing(false)
-    } catch (err: any) {
-      setError(err.message || 'Error al actualizar el perfil')
+    } catch (err) {
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -98,8 +104,8 @@ export default function ProfilePage() {
       await savedSignatureApi.delete(id)
       setSignatures(signatures.filter(sig => sig.id !== id))
       setSuccess('Firma eliminada exitosamente')
-    } catch (err: any) {
-      setError(err.message || 'Error al eliminar la firma')
+    } catch (err) {
+      setError(getErrorMessage(err))
     }
   }
 
@@ -121,8 +127,8 @@ export default function ProfilePage() {
       
       setSuccess('Firma guardada exitosamente')
       setShowSignatureModal(false)
-    } catch (err: any) {
-      setError(err.message || 'Error al guardar la firma')
+    } catch (err) {
+      setError(getErrorMessage(err))
       throw err
     }
   }
@@ -145,8 +151,8 @@ export default function ProfilePage() {
       })))
       
       setSuccess('Firma por defecto actualizada')
-    } catch (err: any) {
-      setError(err.message || 'Error al actualizar firma por defecto')
+    } catch (err) {
+      setError(getErrorMessage(err))
     }
   }
 

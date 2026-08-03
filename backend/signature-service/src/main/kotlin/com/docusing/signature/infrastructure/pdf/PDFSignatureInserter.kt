@@ -9,9 +9,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject
 import org.springframework.stereotype.Component
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.io.InputStream
-import java.nio.file.Files
 import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
@@ -22,103 +20,11 @@ class PDFSignatureInserter(
 ) {
 
     /**
-     * Inserta una imagen de firma en un documento PDF en las coordenadas especificadas
-     * 
-     * @param pdfInputStream InputStream del PDF original
-     * @param signatureImagePath Ruta al archivo de imagen de la firma
-     * @param pageNumber Número de página (0-indexed)
-     * @param x Coordenada X (desde la izquierda)
-     * @param y Coordenada Y (desde abajo)
-     * @param width Ancho de la firma
-     * @param height Alto de la firma
-     * @return ByteArray del PDF modificado con la firma insertada
-     */
-    fun insertSignature(
-        pdfInputStream: InputStream,
-        signatureImagePath: Path,
-        pageNumber: Int,
-        x: Double,
-        y: Double,
-        width: Double,
-        height: Double
-    ): ByteArray {
-        val document: PDDocument = Loader.loadPDF(pdfInputStream.readBytes())
-        return document.use { doc ->
-            try {
-                // Remover seguridad/encriptación del PDF si existe
-                if (doc.isEncrypted) {
-                    logger.warn { "PDF está encriptado, removiendo seguridad para permitir modificaciones" }
-                    doc.setAllSecurityToBeRemoved(true)
-                }
-                
-                // Validar número de página
-                if (pageNumber < 0 || pageNumber >= doc.numberOfPages) {
-                    throw IllegalArgumentException(
-                        "Número de página inválido: $pageNumber (documento tiene ${doc.numberOfPages} páginas)"
-                    )
-                }
-
-                // Obtener la página
-                val page = doc.getPage(pageNumber)
-
-                // Cargar imagen de firma
-                val signatureImage = PDImageXObject.createFromFileByContent(
-                    signatureImagePath.toFile(),
-                    doc
-                )
-
-                // Convertir coordenada Y desde el origen superior (frontend) al inferior (PDF)
-                val pageHeight = page.mediaBox.height
-                val yFromBottom = convertYFromTop(pageHeight, y, height)
-
-                // Insertar imagen en la página
-                val minWidth = 120.0
-                val minHeight = 40.0
-                val finalWidth = width.coerceAtLeast(minWidth)
-                val finalHeight = height.coerceAtLeast(minHeight)
-
-                val contentStream = PDPageContentStream(
-                    doc,
-                    page,
-                    PDPageContentStream.AppendMode.APPEND,
-                    true,
-                    true
-                )
-                val clampedX = x.coerceIn(0.0, (page.mediaBox.width - finalWidth).toDouble())
-                val clampedTopY = y.coerceIn(0.0, (pageHeight - finalHeight).toDouble())
-                val clampedYFromBottom = convertYFromTop(pageHeight, clampedTopY, finalHeight)
-
-                contentStream.use { cs ->
-                    cs.drawImage(
-                        signatureImage,
-                        clampedX.toFloat(),
-                        clampedYFromBottom.toFloat(),
-                        finalWidth.toFloat(),
-                        finalHeight.toFloat()
-                    )
-                }
-
-                // Guardar PDF modificado en ByteArray
-                val outputStream = ByteArrayOutputStream()
-                doc.save(outputStream)
-                val result = outputStream.toByteArray()
-                logger.info {
-                    "Firma insertada en página $pageNumber en posición ($x, $y) con tamaño ${finalWidth}x${finalHeight}. PDF resultante: ${result.size} bytes"
-                }
-                result
-            } catch (e: Exception) {
-                logger.error(e) { "Error al insertar firma en PDF (página=$pageNumber, x=$x, y=$y, w=$width, h=$height)" }
-                throw PDFSignatureInsertionException("Error al insertar firma en PDF", e)
-            }
-        }
-    }
-
-    /**
-     * Inserta múltiples firmas en un documento PDF
-     * 
+     * Inserta múltiples firmas en un documento PDF.
+     *
      * @param pdfInputStream InputStream del PDF original
      * @param signatures Lista de datos de firmas a insertar
-     * @param signatureRequest Solicitud de firma (opcional, para obtener pdfViewerWidth)
+     * @param signatureRequest Solicitud de firma (opcional, para escalar coordenadas y agregar certificado)
      * @return ByteArray del PDF modificado con todas las firmas
      */
     fun insertMultipleSignatures(

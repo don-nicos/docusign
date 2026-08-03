@@ -5,7 +5,7 @@ import '@/lib/polyfills'
 // Import PDF worker configuration BEFORE react-pdf components
 import '@/lib/pdfWorker'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { PDF_VIEWER_WIDTH } from '@/lib/pdfConstants'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
