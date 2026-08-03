@@ -1,0 +1,109 @@
+-- Usuarios de prueba para el sistema
+-- Este archivo se ejecuta DESPUÉS de que Hibernate cree las tablas
+-- Todos los usuarios comparten la contraseña: Test1234!
+-- Hash BCrypt: $2a$10$K.0HwpsoPDGaB/atFBmmXOGTw4ceeg33.WrxJgccpkRJLWPCQvGIa
+
+-- Usuario 1: Juan Pérez (Administrador)
+MERGE INTO users (id, email, full_name, password_hash, rut, phone, address, birth_date, status, created_at, updated_at)
+KEY(email)
+VALUES (
+    'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    'juan.perez@empresa.cl',
+    'Juan Pérez González',
+    '$2a$10$K.0HwpsoPDGaB/atFBmmXOGTw4ceeg33.WrxJgccpkRJLWPCQvGIa',
+    '12.345.678-9',
+    '+56912345678',
+    'Av. Providencia 1234, Santiago',
+    '1985-03-15',
+    'ACTIVE',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+);
+
+-- Usuario 2: María Silva (Contadora)
+MERGE INTO users (id, email, full_name, password_hash, rut, phone, address, birth_date, status, created_at, updated_at)
+KEY(email)
+VALUES (
+    'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+    'maria.silva@empresa.cl',
+    'María Silva Rodríguez',
+    '$2a$10$K.0HwpsoPDGaB/atFBmmXOGTw4ceeg33.WrxJgccpkRJLWPCQvGIa',
+    '15.678.901-2',
+    '+56923456789',
+    'Los Leones 456, Providencia, Santiago',
+    '1990-07-22',
+    'ACTIVE',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+);
+
+-- Usuario 3: Carlos López (Gerente)
+MERGE INTO users (id, email, full_name, password_hash, rut, phone, address, birth_date, status, created_at, updated_at)
+KEY(email)
+VALUES (
+    'c3d4e5f6-a7b8-9012-cdef-123456789012',
+    'carlos.lopez@empresa.cl',
+    'Carlos López Martínez',
+    '$2a$10$K.0HwpsoPDGaB/atFBmmXOGTw4ceeg33.WrxJgccpkRJLWPCQvGIa',
+    '18.234.567-8',
+    '+56934567890',
+    'Apoquindo 3000, Las Condes, Santiago',
+    '1982-11-08',
+    'ACTIVE',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+);
+
+-- Usuario 4: Ana Torres (Legal)
+MERGE INTO users (id, email, full_name, password_hash, rut, phone, address, birth_date, status, created_at, updated_at)
+KEY(email)
+VALUES (
+    'd4e5f6a7-b8c9-0123-defa-234567890123',
+    'ana.torres@legal.cl',
+    'Ana Torres Pinto',
+    '$2a$10$K.0HwpsoPDGaB/atFBmmXOGTw4ceeg33.WrxJgccpkRJLWPCQvGIa',
+    '14.567.890-1',
+    '+56945678901',
+    'Nueva Providencia 1801, Providencia, Santiago',
+    '1988-05-30',
+    'ACTIVE',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+);
+
+-- Usuario 5: Pedro Morales (Desarrollador)
+MERGE INTO users (id, email, full_name, password_hash, rut, phone, address, birth_date, status, created_at, updated_at)
+KEY(email)
+VALUES (
+    'e5f6a7b8-c9d0-1234-efab-345678901234',
+    'pedro.morales@techco.cl',
+    'Pedro Morales Castillo',
+    '$2a$10$K.0HwpsoPDGaB/atFBmmXOGTw4ceeg33.WrxJgccpkRJLWPCQvGIa',
+    '16.789.012-3',
+    '+56956789012',
+    'Av. Italia 850, Ñuñoa, Santiago',
+    '1992-09-14',
+    'ACTIVE',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+);
+
+-- Usuario 6: Sofía Ramírez (Recursos Humanos)
+MERGE INTO users (id, email, full_name, password_hash, rut, phone, address, birth_date, status, created_at, updated_at)
+KEY(email)
+VALUES (
+    'f6a7b8c9-d0e1-2345-fabc-456789012345',
+    'sofia.ramirez@rrhh.cl',
+    'Sofía Ramírez Fuentes',
+    '$2a$10$K.0HwpsoPDGaB/atFBmmXOGTw4ceeg33.WrxJgccpkRJLWPCQvGIa',
+    '17.890.123-4',
+    '+56967890123',
+    'Pedro de Valdivia 291, Providencia, Santiago',
+    '1987-12-03',
+    'ACTIVE',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+);
+
+-- NOTA: Las credenciales de prueba para todos los usuarios son:
+-- Email: (ver arriba) / Password: Test1234!

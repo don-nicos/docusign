@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+__MACOSX/
+
+# Logs / runtime artifacts
+*.log
+*.pid
+
+# Runtime data
+**/data/documents/
+**/data/signatures/
+**/authdb.mv.db
+
+# IDE
+.idea/
+.vscode/
+
+# Gradle
+**/.gradle/
+**/build/
+
+# Kotlin/Java compiled output
+**/out/
+**/bin/
+
+# Node / Next
+**/node_modules/
+frontend/.next/
+frontend/test-results/
+frontend/playwright-report/
+
+# Local env (tracked intentionally - keep values sanitized for secrets)
+!.env
+!.env.*

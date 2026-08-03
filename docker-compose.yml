@@ -1,0 +1,197 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=docusing
+      - POSTGRES_USER=docusing
+      - POSTGRES_PASSWORD=docusing
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docusing -d docusing"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - docusing-network
+
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep -q 'UP'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/docusing
+      - SPRING_DATASOURCE_USERNAME=docusing
+      - SPRING_DATASOURCE_PASSWORD=docusing
+      - NOTIFICATION_SERVICE_BASE_URL=http://notification-service:8084
+      - APP_FRONTEND_BASE_URL=${APP_FRONTEND_BASE_URL:-http://localhost:3000}
+    depends_on:
+      - postgres
+    networks:
+      - docusing-network
+
+  document-service:
+    build:
+      context: ./backend/document-service
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health | grep -q 'UP'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/docusing
+      - SPRING_DATASOURCE_USERNAME=docusing
+      - SPRING_DATASOURCE_PASSWORD=docusing
+      - STORAGE_LOCAL_BASE_PATH=/app/data/documents
+      - PAYMENT_SERVICE_BASE_URL=http://payment-service:8085
+      - APP_FREE_TIER_MAX_DOCUMENTS=3
+      - AWS_S3_REGION=${DOCUSING_S3_AWS_S3_REGION:-us-east-2}
+      - AWS_S3_ACCESS_KEY=${DOCUSING_S3_AWS_S3_ACCESS_KEY}
+      - AWS_S3_SECRET_KEY=${DOCUSING_S3_AWS_S3_SECRET_KEY}
+      - AWS_S3_BUCKET_DOCUMENTS=docusing-dev
+    volumes:
+      - document-data:/app/data/documents
+    depends_on:
+      - postgres
+      - payment-service
+    networks:
+      - docusing-network
+
+  signature-service:
+    build:
+      context: ./backend/signature-service
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health | grep -q 'UP'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/docusing
+      - SPRING_DATASOURCE_USERNAME=docusing
+      - SPRING_DATASOURCE_PASSWORD=docusing
+      - DOCUMENT_SERVICE_BASE_URL=http://document-service:8082
+      - NOTIFICATION_SERVICE_BASE_URL=http://notification-service:8084
+      - PAYMENT_SERVICE_BASE_URL=http://payment-service:8085
+      - APP_FRONTEND_BASE_URL=${APP_FRONTEND_BASE_URL:-http://localhost:3000}
+      - APP_FREE_TIER_MAX_DOCUMENTS=3
+      - AWS_S3_REGION=${DOCUSING_S3_AWS_S3_REGION:-us-east-2}
+      - AWS_S3_ACCESS_KEY=${DOCUSING_S3_AWS_S3_ACCESS_KEY}
+      - AWS_S3_SECRET_KEY=${DOCUSING_S3_AWS_S3_SECRET_KEY}
+      - AWS_S3_BUCKET_SIGNED_PDFS=${DOCUSING_S3_AWS_S3_BUCKET_SIGNED_PDFS:-docusing-dev}
+      - AWS_S3_BUCKET_SIGNATURES=${DOCUSING_S3_AWS_S3_BUCKET_SIGNATURES:-docusing-dev}
+    depends_on:
+      - postgres
+    networks:
+      - docusing-network
+
+  payment-service:
+    build:
+      context: ./backend/payment-service
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health | grep -q 'UP'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - ./env/payment-service.env
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/docusing
+      - SPRING_DATASOURCE_USERNAME=docusing
+      - SPRING_DATASOURCE_PASSWORD=docusing
+      - NOTIFICATION_SERVICE_BASE_URL=http://notification-service:8084
+      - AUTH_SERVICE_BASE_URL=http://auth-service:8081
+    depends_on:
+      - postgres
+    networks:
+      - docusing-network
+
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/actuator/health | grep -q 'UP'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - APP_FRONTEND_BASE_URL=${APP_FRONTEND_BASE_URL:-http://localhost:3000}
+      - SPRING_MAIL_HOST=mailhog
+      - SPRING_MAIL_PORT=1025
+      - SPRING_MAIL_USERNAME=
+      - SPRING_MAIL_PASSWORD=
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=false
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=false
+    depends_on:
+      - mailhog
+    networks:
+      - docusing-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8025/ | grep -q 'MailHog'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - docusing-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ | grep -q 'Docusing'"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    environment:
+      - NEXT_PUBLIC_API_AUTH_URL=http://localhost:8081
+      - NEXT_PUBLIC_API_DOCUMENT_URL=http://localhost:8082
+      - NEXT_PUBLIC_API_SIGNATURE_URL=http://localhost:8083
+      - NEXT_PUBLIC_API_PAYMENT_URL=http://localhost:8085
+    depends_on:
+      - auth-service
+      - document-service
+      - signature-service
+      - notification-service
+      - payment-service
+    networks:
+      - docusing-network
+
+networks:
+  docusing-network:
+    driver: bridge
+
+volumes:
+  document-data:
+  pgdata:
