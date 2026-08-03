@@ -27,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -203,8 +204,35 @@ class SubscriptionService(
             .filter { it.currentPeriodEnd != null && it.currentPeriodEnd!!.isAfter(now) }
             .maxByOrNull { it.currentPeriodEnd ?: Instant.EPOCH }
 
-        val sub = activeSub ?: subscriptionRepository.findFirstByUserIdOrderByCreatedAtDesc(userId) ?: return null
+        if (activeSub != null) {
+            val lastCharge = subscriptionChargeRepository.findAll().asSequence()
+                .filter { it.subscription.id == activeSub.id }
+                .maxByOrNull { it.createdAt ?: Instant.EPOCH }
+            return SubscriptionWithChargeResponse(
+                subscription = toResponse(activeSub),
+                lastCharge = lastCharge?.let { toChargeResponse(it) }
+            )
+        }
 
+        if (!mercadoPagoProperties.enabled) {
+            val farFuture = now.plus(Duration.ofDays(3650))
+            return SubscriptionWithChargeResponse(
+                subscription = SubscriptionResponse(
+                    id = "mock-free-${userId}",
+                    userId = userId.toString(),
+                    planKey = "free",
+                    provider = SubscriptionProvider.MOCK,
+                    providerSubscriptionId = null,
+                    status = SubscriptionStatus.ACTIVE,
+                    startedAt = now,
+                    currentPeriodEnd = farFuture,
+                    cancelAtPeriodEnd = false
+                ),
+                lastCharge = null
+            )
+        }
+
+        val sub = subscriptionRepository.findFirstByUserIdOrderByCreatedAtDesc(userId) ?: return null
         val lastCharge = subscriptionChargeRepository.findAll().asSequence()
             .filter { it.subscription.id == sub.id }
             .maxByOrNull { it.createdAt ?: Instant.EPOCH }
@@ -216,6 +244,10 @@ class SubscriptionService(
 
     @Transactional(readOnly = true)
     fun isActive(userId: UUID, organizationId: UUID? = null): Pair<Boolean, Instant?> {
+        if (!mercadoPagoProperties.enabled) {
+            return true to Instant.now(clock).plus(Duration.ofDays(3650))
+        }
+
         val now = Instant.now(clock)
 
         val candidates = subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)

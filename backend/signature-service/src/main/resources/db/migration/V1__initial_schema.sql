@@ -10,7 +10,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================================================================
 -- TABLA: signature_requests
 -- =============================================================================
-CREATE TABLE signature_requests (
+CREATE TABLE IF NOT EXISTS signature_requests (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     owner_id VARCHAR(255) NOT NULL,
     title VARCHAR(255) NOT NULL,
@@ -27,14 +27,14 @@ CREATE TABLE signature_requests (
     CONSTRAINT signature_requests_pkey PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_signature_requests_owner_id ON signature_requests(owner_id);
-CREATE INDEX idx_signature_requests_status ON signature_requests(status);
-CREATE INDEX idx_signature_requests_document_id ON signature_requests(document_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_owner_id ON signature_requests(owner_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_status ON signature_requests(status);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_document_id ON signature_requests(document_id);
 
 -- =============================================================================
 -- TABLA: signers
 -- =============================================================================
-CREATE TABLE signers (
+CREATE TABLE IF NOT EXISTS signers (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     signature_request_id UUID NOT NULL,
     email VARCHAR(255) NOT NULL,
@@ -53,14 +53,14 @@ CREATE TABLE signers (
     CONSTRAINT signers_signature_request_id_fkey FOREIGN KEY (signature_request_id) REFERENCES signature_requests(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_signers_signature_request_id ON signers(signature_request_id);
-CREATE INDEX idx_signers_email ON signers(email);
-CREATE INDEX idx_signers_status ON signers(status);
+CREATE INDEX IF NOT EXISTS idx_signers_signature_request_id ON signers(signature_request_id);
+CREATE INDEX IF NOT EXISTS idx_signers_email ON signers(email);
+CREATE INDEX IF NOT EXISTS idx_signers_status ON signers(status);
 
 -- =============================================================================
 -- TABLA: signature_positions
 -- =============================================================================
-CREATE TABLE signature_positions (
+CREATE TABLE IF NOT EXISTS signature_positions (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     signer_id UUID NOT NULL,
     page INTEGER NOT NULL,
@@ -72,12 +72,12 @@ CREATE TABLE signature_positions (
     CONSTRAINT signature_positions_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_signature_positions_signer_id ON signature_positions(signer_id);
+CREATE INDEX IF NOT EXISTS idx_signature_positions_signer_id ON signature_positions(signer_id);
 
 -- =============================================================================
 -- TABLA: pdf_versions
 -- =============================================================================
-CREATE TABLE pdf_versions (
+CREATE TABLE IF NOT EXISTS pdf_versions (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     signature_request_id UUID NOT NULL,
     version_number INTEGER NOT NULL,
@@ -89,13 +89,13 @@ CREATE TABLE pdf_versions (
     CONSTRAINT pdf_versions_created_by_signer_id_fkey FOREIGN KEY (created_by_signer_id) REFERENCES signers(id) ON DELETE SET NULL
 );
 
-CREATE INDEX idx_pdf_versions_signature_request_id ON pdf_versions(signature_request_id);
-CREATE INDEX idx_pdf_versions_version_number ON pdf_versions(signature_request_id, version_number);
+CREATE INDEX IF NOT EXISTS idx_pdf_versions_signature_request_id ON pdf_versions(signature_request_id);
+CREATE INDEX IF NOT EXISTS idx_pdf_versions_version_number ON pdf_versions(signature_request_id, version_number);
 
 -- =============================================================================
 -- TABLA: reminder_tracking
 -- =============================================================================
-CREATE TABLE reminder_tracking (
+CREATE TABLE IF NOT EXISTS reminder_tracking (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     signature_request_id UUID NOT NULL,
     signer_id UUID,
@@ -106,13 +106,13 @@ CREATE TABLE reminder_tracking (
     CONSTRAINT reminder_tracking_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_reminder_tracking_signature_request_id ON reminder_tracking(signature_request_id);
-CREATE INDEX idx_reminder_tracking_signer_id ON reminder_tracking(signer_id);
+CREATE INDEX IF NOT EXISTS idx_reminder_tracking_signature_request_id ON reminder_tracking(signature_request_id);
+CREATE INDEX IF NOT EXISTS idx_reminder_tracking_signer_id ON reminder_tracking(signer_id);
 
 -- =============================================================================
 -- TABLA: user_signatures
 -- =============================================================================
-CREATE TABLE user_signatures (
+CREATE TABLE IF NOT EXISTS user_signatures (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     user_id UUID NOT NULL,
     signature_image_path VARCHAR(500) NOT NULL,
@@ -123,13 +123,13 @@ CREATE TABLE user_signatures (
     CONSTRAINT user_signatures_pkey PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_user_signatures_user_id ON user_signatures(user_id);
-CREATE INDEX idx_user_signatures_user_default ON user_signatures(user_id, is_default) WHERE is_default = TRUE;
+CREATE INDEX IF NOT EXISTS idx_user_signatures_user_id ON user_signatures(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_signatures_user_default ON user_signatures(user_id, is_default) WHERE is_default = TRUE;
 
 -- =============================================================================
 -- TABLA: audit_logs
 -- =============================================================================
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     entity_type VARCHAR(100) NOT NULL,
     entity_id UUID NOT NULL,
@@ -140,10 +140,10 @@ CREATE TABLE audit_logs (
     CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_audit_logs_entity_type ON audit_logs(entity_type);
-CREATE INDEX idx_audit_logs_entity_id ON audit_logs(entity_id);
-CREATE INDEX idx_audit_logs_actor_id ON audit_logs(actor_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_type ON audit_logs(entity_type);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
 -- =============================================================================
 -- TABLA: http_integration_logs
@@ -174,7 +174,7 @@ CREATE INDEX IF NOT EXISTS idx_http_integration_logs_trace_id ON http_integratio
 -- =============================================================================
 -- TABLA: shedlock (para scheduled tasks)
 -- =============================================================================
-CREATE TABLE shedlock (
+CREATE TABLE IF NOT EXISTS shedlock (
     name VARCHAR(64) NOT NULL,
     lock_until TIMESTAMP NOT NULL,
     locked_at TIMESTAMP NOT NULL,
