@@ -10,7 +10,7 @@ import { documentApi, paymentApi, organizationApi, type UserOrganization } from 
 import type { Document, ApiError } from '@/types'
 
 export default function UploadDocumentPage() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const router = useRouter()
   const [loadingAccess, setLoadingAccess] = useState(true)
   const [canUpload, setCanUpload] = useState(true)
@@ -127,6 +127,14 @@ export default function UploadDocumentPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+      </div>
+    )
   }
 
   if (!loadingAccess && !canUpload) {
