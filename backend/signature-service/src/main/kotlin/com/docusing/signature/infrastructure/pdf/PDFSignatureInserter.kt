@@ -30,7 +30,8 @@ class PDFSignatureInserter(
     fun insertMultipleSignatures(
         pdfInputStream: InputStream,
         signatures: List<SignatureData>,
-        signatureRequest: SignatureRequestEntity? = null
+        signatureRequest: SignatureRequestEntity? = null,
+        addCertificate: Boolean = false
     ): ByteArray {
         val document: PDDocument = Loader.loadPDF(pdfInputStream.readBytes())
         return document.use { doc ->
@@ -110,8 +111,8 @@ class PDFSignatureInserter(
                     }
                 }
                 
-                // Agregar certificado de auditoría si se proporciona la solicitud
-                if (signatureRequest != null) {
+                // Agregar certificado de auditoría solo si es la firma final
+                if (addCertificate && signatureRequest != null) {
                     pdfAuditCertificate.addAuditCertificate(doc, signatureRequest)
                     logger.info { "Certificado de auditoría agregado al PDF" }
                 }

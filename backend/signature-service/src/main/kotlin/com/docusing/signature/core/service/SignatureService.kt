@@ -846,10 +846,19 @@ class SignatureService(
         logger.info { "Generando PDF con firmas para solicitud $requestId, documento ${signatureRequest.documentId}, certificado=$addCertificate" }
 
         val originalPdfBytes = runCatching {
-            documentFeignClient.downloadPdf(signatureRequest.documentId).body 
-                ?: throw IllegalStateException("No se pudo descargar el PDF")
+            // Siempre partir del PDF original (versión 0) para evitar firmas duplicadas
+            // cuando document-service ya contiene un PDF parcialmente firmado.
+            val originalVersion = pdfVersionRepository.findBySignatureRequestIdAndVersionNumber(requestId, 0)
+            if (originalVersion != null) {
+                logger.info { "Cargando PDF original versión 0 para solicitud $requestId: ${originalVersion.filePath}" }
+                signedPdfStorage.readBytes(originalVersion.filePath)
+            } else {
+                logger.warn { "No se encontró versión 0 para solicitud $requestId, descargando desde document-service como fallback" }
+                documentFeignClient.downloadPdf(signatureRequest.documentId).body
+                    ?: throw IllegalStateException("No se pudo descargar el PDF")
+            }
         }.getOrElse { ex ->
-            logger.error(ex) { "Error al descargar PDF del documento ${signatureRequest.documentId}" }
+            logger.error(ex) { "Error al descargar PDF original para solicitud $requestId" }
             throw ex
         }
 
@@ -923,7 +932,8 @@ class SignatureService(
             val signedPdfBytes = pdfSignatureInserter.insertMultipleSignatures(
                 pdfInputStream = originalPdfBytes.inputStream(),
                 signatures = signaturesData,
-                signatureRequest = if (addCertificate) signatureRequest else null
+                signatureRequest = signatureRequest,
+                addCertificate = addCertificate
             )
 
             logger.info { "PDF con ${signaturesData.size} firmas generado exitosamente para solicitud $requestId" }
