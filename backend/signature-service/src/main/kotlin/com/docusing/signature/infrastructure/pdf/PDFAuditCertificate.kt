@@ -1,5 +1,6 @@
 package com.docusing.signature.infrastructure.pdf
 
+import com.docusing.signature.config.FrontendProperties
 import com.docusing.signature.domain.model.SignatureRequestEntity
 import com.docusing.signature.infrastructure.qr.QRCodeGenerator
 import org.apache.pdfbox.pdmodel.PDDocument
@@ -31,7 +32,8 @@ private const val QR_MODULES_PER_VERSION = 4
 
 @Component
 class PDFAuditCertificate(
-    private val qrCodeGenerator: QRCodeGenerator
+    private val qrCodeGenerator: QRCodeGenerator,
+    private val frontendProperties: FrontendProperties
 ) {
 
     private val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
@@ -39,6 +41,15 @@ class PDFAuditCertificate(
     private val labelFont = PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD)
     private val valueFont = PDType1Font(Standard14Fonts.FontName.HELVETICA)
     private val monoFont = PDType1Font(Standard14Fonts.FontName.COURIER)
+
+    private fun buildVerificationUrl(requestId: String, signerId: String? = null): String {
+        val base = frontendProperties.baseUrl.trimEnd('/')
+        return if (signerId.isNullOrBlank()) {
+            "$base/validar?rid=$requestId"
+        } else {
+            "$base/validar?rid=$requestId&sid=$signerId"
+        }
+    }
 
     private fun sanitizeText(text: String?): String {
         if (text.isNullOrBlank()) return ""
@@ -199,27 +210,23 @@ class PDFAuditCertificate(
         }
 
         // Recolectar todos los contenidos de los QR para usar la misma versión (y por tanto el mismo tamaño).
+        val requestId = signatureRequest.id?.toString() ?: ""
+        val documentQrContent = if (requestId.isNotBlank()) buildVerificationUrl(requestId) else ""
+
         val signers = signatureRequest.signers.orEmpty().sortedBy { it.orderIndex }
         val signerQrContents = signers.map { signer ->
-            val signedDate = signer.signedAt?.let {
-                dateFormatter.format(it.atZone(ZoneId.of("America/Santiago")).toLocalDateTime())
-            } ?: "Pendiente"
-            val authMethod = signer.authenticationMethod ?: "N/A"
-            buildString {
-                append("Firmante: ${signer.fullName}\n")
-                append("Email: ${signer.email}\n")
-                append("Fecha: $signedDate\n")
-                append("Método: $authMethod\n")
-                append("IP: ${signer.signerIpAddress ?: "N/A"}\n")
-                append("ID: ${signer.id}")
+            if (requestId.isNotBlank() && signer.id != null) {
+                buildVerificationUrl(requestId, signer.id.toString())
+            } else {
+                ""
             }
         }
 
         val allQrContents = mutableListOf<String>()
-        if (documentHash != "NO_HASH") {
-            allQrContents.add(documentHash)
+        if (documentQrContent.isNotBlank()) {
+            allQrContents.add(documentQrContent)
         }
-        allQrContents.addAll(signerQrContents)
+        allQrContents.addAll(signerQrContents.filter { it.isNotBlank() })
 
         val maxQrVersion = allQrContents
             .maxOfOrNull { qrCodeGenerator.minVersionFor(it) }
@@ -256,8 +263,8 @@ class PDFAuditCertificate(
 
         // QR del documento alineado a la derecha, con su borde superior alineado al texto "Documento:"
         val documentQrTop = MARGIN_TOP - 70f
-        if (documentHash != "NO_HASH") {
-            drawQRCode(document, content, documentHash, qrX, documentQrTop - QR_SIZE, QR_SIZE, maxQrVersion, qrImageSize)
+        if (documentQrContent.isNotBlank()) {
+            drawQRCode(document, content, documentQrContent, qrX, documentQrTop - QR_SIZE, QR_SIZE, maxQrVersion, qrImageSize)
         }
 
         // Separador

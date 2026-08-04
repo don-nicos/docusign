@@ -24,6 +24,7 @@ object ApiRoutes {
         const val DOWNLOAD_SIGNED = "/{requestId}/download-signed"
         const val REGENERATE_MAGIC_LINK = "/{requestId}/regenerate-magic-link/{signerId}"
         const val SIGNATURE_IMAGES = "/images/{*filename}"
+        const val VERIFY = "/verify/{requestId}"
 
         object Versions {
             const val LIST = "/{requestId}/versions"
