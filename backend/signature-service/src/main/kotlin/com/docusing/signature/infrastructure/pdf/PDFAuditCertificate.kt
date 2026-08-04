@@ -21,9 +21,13 @@ private const val MARGIN_RIGHT = 50f
 private const val MARGIN_TOP = 770f
 private const val MARGIN_BOTTOM = 70f
 private const val CONTENT_WIDTH = 495f // A4 (595) - 50 - 50
-private const val QR_SIZE = 80f
+private const val QR_SIZE = 90f
+private const val QR_PIXELS_PER_MODULE = 4
 private const val SIGNER_BLOCK_MIN_HEIGHT = 180f
 private const val FOOTER_HEIGHT = 50f
+private const val QR_QUIET_ZONE_MODULES = 1
+private const val QR_FIXED_MODULES = 17
+private const val QR_MODULES_PER_VERSION = 4
 
 @Component
 class PDFAuditCertificate(
@@ -145,10 +149,12 @@ class PDFAuditCertificate(
         text: String,
         x: Float,
         y: Float,
-        size: Float
+        size: Float,
+        version: Int,
+        imageSize: Int
     ) {
         if (text.isBlank()) return
-        val qrImage = qrCodeGenerator.generateQRCode(text, size.toInt())
+        val qrImage = qrCodeGenerator.generateQRCode(text, imageSize, version)
         val pdImage = LosslessFactory.createFromImage(document, qrImage)
         content.drawImage(pdImage, x, y, size, size)
     }
@@ -192,6 +198,35 @@ class PDFAuditCertificate(
             signatureRequest.documentHash!!
         }
 
+        // Recolectar todos los contenidos de los QR para usar la misma versión (y por tanto el mismo tamaño).
+        val signers = signatureRequest.signers.orEmpty().sortedBy { it.orderIndex }
+        val signerQrContents = signers.map { signer ->
+            val signedDate = signer.signedAt?.let {
+                dateFormatter.format(it.atZone(ZoneId.of("America/Santiago")).toLocalDateTime())
+            } ?: "Pendiente"
+            val authMethod = signer.authenticationMethod ?: "N/A"
+            buildString {
+                append("Firmante: ${signer.fullName}\n")
+                append("Email: ${signer.email}\n")
+                append("Fecha: $signedDate\n")
+                append("Método: $authMethod\n")
+                append("IP: ${signer.signerIpAddress ?: "N/A"}\n")
+                append("ID: ${signer.id}")
+            }
+        }
+
+        val allQrContents = mutableListOf<String>()
+        if (documentHash != "NO_HASH") {
+            allQrContents.add(documentHash)
+        }
+        allQrContents.addAll(signerQrContents)
+
+        val maxQrVersion = allQrContents
+            .maxOfOrNull { qrCodeGenerator.minVersionFor(it) }
+            ?.coerceAtLeast(1) ?: 1
+        val qrModules = QR_FIXED_MODULES + QR_MODULES_PER_VERSION * maxQrVersion + 2 * QR_QUIET_ZONE_MODULES
+        val qrImageSize = qrModules * QR_PIXELS_PER_MODULE
+
         var (currentPage, content) = newCertificatePage(document, false)
 
         val documentTitle = sanitizeText(signatureRequest.title)
@@ -219,9 +254,11 @@ class PDFAuditCertificate(
             yPos -= 15f
         }
 
-        // QR del documento alineado a la derecha, en la parte superior de la sección
-        val documentQrY = MARGIN_TOP - 80f - QR_SIZE
-        drawQRCode(document, content, documentHash, qrX, documentQrY, QR_SIZE)
+        // QR del documento alineado a la derecha, con su borde superior alineado al texto "Documento:"
+        val documentQrTop = MARGIN_TOP - 70f
+        if (documentHash != "NO_HASH") {
+            drawQRCode(document, content, documentHash, qrX, documentQrTop - QR_SIZE, QR_SIZE, maxQrVersion, qrImageSize)
+        }
 
         // Separador
         yPos -= 15f
@@ -236,9 +273,9 @@ class PDFAuditCertificate(
         drawTextLine(content, "Registro de Firmantes", MARGIN_LEFT, yPos, labelFont, 14f)
         yPos -= 30f
 
-        val signers = signatureRequest.signers.orEmpty().sortedBy { it.orderIndex }
+        signers.forEachIndexed { index, signer ->
+            val signerInfo = signerQrContents[index]
 
-        signers.forEach { signer ->
             // Asegurar espacio suficiente antes de dibujar el bloque
             if (yPos - SIGNER_BLOCK_MIN_HEIGHT < MARGIN_BOTTOM + FOOTER_HEIGHT) {
                 content.close()
@@ -256,7 +293,12 @@ class PDFAuditCertificate(
             content.moveTo(MARGIN_LEFT, yPos)
             content.lineTo(currentPage.mediaBox.width - MARGIN_RIGHT, yPos)
             content.stroke()
-            yPos -= 12f
+
+            // QR del firmante alineado a la derecha, con su borde superior alineado al nombre del firmante
+            val signerQrTop = blockStartY - 4f
+            drawQRCode(document, content, signerInfo, qrX, signerQrTop - QR_SIZE, QR_SIZE, maxQrVersion, qrImageSize)
+
+            yPos = blockStartY - 12f
 
             val signedDate = signer.signedAt?.let {
                 dateFormatter.format(it.atZone(ZoneId.of("America/Santiago")).toLocalDateTime())
@@ -272,21 +314,9 @@ class PDFAuditCertificate(
             yPos = drawWrappedText(content, "Fecha: $signedDate", MARGIN_LEFT + 15f, yPos, signerTextMaxWidth, valueFont, 9f, 13f)
             yPos = drawWrappedText(content, "Método: $authMethod", MARGIN_LEFT + 15f, yPos, signerTextMaxWidth, valueFont, 9f, 13f)
 
-            // QR del firmante (derecha)
-            val signerInfo = buildString {
-                append("Firmante: ${signer.fullName}\n")
-                append("Email: ${signer.email}\n")
-                append("Fecha: $signedDate\n")
-                append("Método: $authMethod\n")
-                append("IP: ${signer.signerIpAddress ?: "N/A"}\n")
-                append("ID: ${signer.id}")
-            }
-
-            val signerQrY = yPos - 10f
-            drawQRCode(document, content, signerInfo, qrX, signerQrY, QR_SIZE)
-
             // Dejar espacio proporcional al bloque dibujado, con un mínimo razonable
-            val blockHeight = kotlin.math.max(SIGNER_BLOCK_MIN_HEIGHT, blockStartY - signerQrY + QR_SIZE + 25f)
+            val blockBottom = yPos - 10f
+            val blockHeight = kotlin.math.max(SIGNER_BLOCK_MIN_HEIGHT, blockStartY - blockBottom + 20f)
             yPos = blockStartY - blockHeight
         }
 

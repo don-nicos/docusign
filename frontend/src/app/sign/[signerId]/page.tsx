@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -61,8 +61,8 @@ interface SignerInfo {
 export default function SignDocumentPage() {
   const router = useRouter()
   const params = useParams()
-  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
-  const token = searchParams.get('token')
+  const searchParams = useSearchParams()
+  const token = searchParams?.get('token')
   const signerId = typeof params?.signerId === 'string' ? params.signerId : Array.isArray(params?.signerId) ? params.signerId[0] : ''
   const [signerInfo, setSignerInfo] = useState<SignerInfo | null>(null)
   const [showSignatureModal, setShowSignatureModal] = useState(false)
@@ -93,10 +93,10 @@ export default function SignDocumentPage() {
   )
 
   useEffect(() => {
-    if (signerId) {
+    if (signerId && searchParams !== null) {
       loadSignatureData()
     }
-  }, [signerId])
+  }, [signerId, searchParams])
 
   const loadSignatureData = async () => {
     try {
@@ -154,7 +154,7 @@ export default function SignDocumentPage() {
       setSignatureDataUrl(tempSignatureDataUrl)
       
       // Firmar directamente sin paso adicional
-      const result = await signatureApi.sign(signerId as string, '')
+      await signatureApi.sign(signerId as string, '')
       setSuccess('¡Documento firmado exitosamente!')
       
       // Limpiar preview para evitar duplicados
@@ -164,8 +164,7 @@ export default function SignDocumentPage() {
       if (signerInfo) {
         setSignerInfo({
           ...signerInfo,
-          signer: { ...signerInfo.signer, status: 'SIGNED' },
-          signatureRequest: result as SignatureRequest
+          signer: { ...signerInfo.signer, status: 'SIGNED' }
         })
       }
       
@@ -193,7 +192,7 @@ export default function SignDocumentPage() {
 
     try {
       // Firmar directamente sin OTP
-      const result = await signatureApi.sign(signerId as string, '')
+      await signatureApi.sign(signerId as string, '')
       setSuccess('¡Documento firmado exitosamente!')
       
       // Limpiar AMBOS estados de firma para evitar duplicados
@@ -204,8 +203,7 @@ export default function SignDocumentPage() {
       if (signerInfo) {
         setSignerInfo({
           ...signerInfo,
-          signer: { ...signerInfo.signer, status: 'SIGNED' },
-          signatureRequest: result as SignatureRequest
+          signer: { ...signerInfo.signer, status: 'SIGNED' }
         })
       }
       
@@ -228,6 +226,11 @@ export default function SignDocumentPage() {
       setError('Error al descargar el documento firmado')
     }
   }
+
+  const fileUrl = useMemo(() => {
+    if (!signerInfo?.signatureRequest.documentId) return ''
+    return documentApi.getViewUrl(signerInfo.signatureRequest.documentId)
+  }, [signerInfo?.signatureRequest.documentId])
 
   if (loading) {
     return (
@@ -269,7 +272,7 @@ export default function SignDocumentPage() {
             <Card title="Documento a Firmar">
               {signerInfo ? (
                 <PDFViewerWithSignatures
-                  fileUrl={`${documentApi.getViewUrl(signerInfo.signatureRequest.documentId)}?t=${Date.now()}`}
+                  fileUrl={fileUrl}
                   signatures={signaturePositions}
                   pdfViewerWidth={signerInfo.signatureRequest.pdfViewerWidth}
                   currentSignerId={signerId as string}
