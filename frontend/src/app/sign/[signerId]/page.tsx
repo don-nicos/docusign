@@ -50,6 +50,8 @@ interface SignatureRequest {
   status: string
   signers: Signer[]
   pdfViewerWidth?: number
+  updatedAt?: string
+  createdAt?: string
 }
 
 interface SignerInfo {
@@ -108,11 +110,6 @@ export default function SignDocumentPage() {
       const info = await signatureApi.getSignerInfo(signerId, token || undefined) as SignerInfo
       setSignerInfo(info)
       
-      // Si ya tiene firma capturada, mostrarla
-      if (info.signer.signatureImagePath) {
-        setSignatureDataUrl(info.signer.signatureImagePath)
-      }
-      
       // Determinar el paso inicial
       if (info.signer.status === 'SIGNED') {
         setSuccess('Este documento ya ha sido firmado')
@@ -125,6 +122,19 @@ export default function SignDocumentPage() {
       setError(apiError.message || 'Error al cargar los datos')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const refreshSignerInfo = async () => {
+    try {
+      const info = await signatureApi.getSignerInfo(signerId, token || undefined) as SignerInfo
+      setSignerInfo(info)
+      if (info.signer.status === 'SIGNED') {
+        setSignatureDataUrl('')
+        setTempSignatureDataUrl('')
+      }
+    } catch {
+      // No borrar el mensaje de éxito si la recarga falla
     }
   }
 
@@ -152,22 +162,14 @@ export default function SignDocumentPage() {
       // Subir imagen de firma al backend
       await signatureApi.uploadSignature(signerId as string, tempSignatureDataUrl, 'draw')
       setSignatureDataUrl(tempSignatureDataUrl)
-      
+
       // Firmar directamente sin paso adicional
       await signatureApi.sign(signerId as string, '')
       setSuccess('¡Documento firmado exitosamente!')
-      
-      // Limpiar preview para evitar duplicados
-      setTempSignatureDataUrl('')
-      
-      // Actualizar información del firmante para mostrar que está firmado
-      if (signerInfo) {
-        setSignerInfo({
-          ...signerInfo,
-          signer: { ...signerInfo.signer, status: 'SIGNED' }
-        })
-      }
-      
+
+      // Recargar datos del firmante para obtener el PDF firmado actualizado
+      await refreshSignerInfo()
+
       setStep('view')
       setShowPreview(false)
     } catch (err) {
@@ -194,19 +196,10 @@ export default function SignDocumentPage() {
       // Firmar directamente sin OTP
       await signatureApi.sign(signerId as string, '')
       setSuccess('¡Documento firmado exitosamente!')
-      
-      // Limpiar AMBOS estados de firma para evitar duplicados
-      setTempSignatureDataUrl('')
-      setSignatureDataUrl('')
-      
-      // Actualizar información del firmante para mostrar que está firmado
-      if (signerInfo) {
-        setSignerInfo({
-          ...signerInfo,
-          signer: { ...signerInfo.signer, status: 'SIGNED' }
-        })
-      }
-      
+
+      // Recargar datos del firmante para obtener el PDF firmado actualizado
+      await refreshSignerInfo()
+
       setStep('view')
       setShowPreview(false)
     } catch (err) {
@@ -229,8 +222,10 @@ export default function SignDocumentPage() {
 
   const fileUrl = useMemo(() => {
     if (!signerInfo?.signatureRequest.documentId) return ''
-    return documentApi.getViewUrl(signerInfo.signatureRequest.documentId)
-  }, [signerInfo?.signatureRequest.documentId])
+    const baseUrl = documentApi.getViewUrl(signerInfo.signatureRequest.documentId)
+    const cacheBuster = signerInfo.signatureRequest.updatedAt
+    return cacheBuster ? `${baseUrl}?t=${encodeURIComponent(cacheBuster)}` : baseUrl
+  }, [signerInfo?.signatureRequest.documentId, signerInfo?.signatureRequest.updatedAt])
 
   if (loading) {
     return (

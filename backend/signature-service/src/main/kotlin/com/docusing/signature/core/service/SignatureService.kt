@@ -478,6 +478,15 @@ class SignatureService(
             // Actualizar referencia a la última versión en la solicitud
             request.signedPdfPath = s3Key
 
+            // Subir/actualizar el PDF visible en document-service tras cada firma,
+            // así el firmante puede ver su firma en el documento inmediatamente.
+            runCatching {
+                val multipartFile = ByteArrayMultipartFile("file", "signed.pdf", "application/pdf", pdfBytes)
+                documentFeignClient.uploadPdf(request.documentId, multipartFile)
+            }.onFailure { ex ->
+                logger.warn(ex) { "Error al subir PDF versionado del documento ${request.documentId}" }
+            }
+
             logger.info { "PDF versión $versionNumber guardado en S3: $s3Key, firmas: $signedCount/$totalSigners, final: $isComplete, hash: $hash" }
         } catch (e: Exception) {
             logger.error(e) { "Error al generar PDF incremental después de firma" }
@@ -486,25 +495,10 @@ class SignatureService(
         if (allSignersSigned(request)) {
             request.status = SignatureRequestStatus.COMPLETED
             request.completedAt = now
-            
+
             // El PDF final ya fue generado arriba con certificado
             logger.info { "Todas las firmas completadas. PDF final ya guardado con certificado." }
-            
-            // Subir al document-service (opcional, para compatibilidad)
-            try {
-                if (request.signedPdfPath != null) {
-                    val pdfBytes = signedPdfStorage.readBytes(request.signedPdfPath!!)
-                    runCatching {
-                        val multipartFile = ByteArrayMultipartFile("file", "signed.pdf", "application/pdf", pdfBytes)
-                        documentFeignClient.uploadPdf(request.documentId, multipartFile)
-                    }.onFailure { ex ->
-                        logger.error(ex) { "Error al subir PDF firmado final del documento ${request.documentId}" }
-                    }
-                }
-            } catch (e: Exception) {
-                logger.error(e) { "Error al subir PDF al document-service" }
-            }
-            
+
             runCatching {
                 val ownerEmail = runCatching {
                     authFeignClient.getUserById(request.ownerId)["email"] as? String

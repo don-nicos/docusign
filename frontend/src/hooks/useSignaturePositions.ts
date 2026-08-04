@@ -42,7 +42,7 @@ const getStatusAndImageUrl = (
   signer: SignerPositionSource,
   previewSignature?: { signerId: string; signatureDataUrl: string }
 ): Pick<SignatureViewPosition, 'status' | 'signatureImageUrl'> => {
-  if (signer.status === 'SIGNED' && signer.signatureImagePath?.includes('/')) {
+  if (signer.status === 'SIGNED' && signer.signatureImagePath) {
     return {
       status: 'SIGNED',
       signatureImageUrl: `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/images/${signer.signatureImagePath}?t=${Date.now()}`

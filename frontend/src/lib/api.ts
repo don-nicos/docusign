@@ -1,6 +1,6 @@
 import { API_CONFIG } from './config'
 import { createTracedHeaders, logWithTrace } from './tracing'
-import type { ApiError } from '@/types'
+import type { ApiError, SignatureUploadResponse } from '@/types'
 
 class ApiClient {
   private getAuthToken(): string | null {
@@ -267,7 +267,7 @@ export const signatureApi = {
     }),
 
   uploadSignature: (signerId: string, signatureDataUrl: string, method?: string) =>
-    apiClient.post(`${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/signer/${signerId}/upload-signature`, {
+    apiClient.post<SignatureUploadResponse>(`${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/signer/${signerId}/upload-signature`, {
       signatureDataUrl,
       method,
     }),

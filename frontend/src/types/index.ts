@@ -18,6 +18,11 @@ export interface SavedSignature {
   createdAt?: string
 }
 
+export interface SignatureUploadResponse {
+  message: string
+  signatureImagePath: string
+}
+
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
