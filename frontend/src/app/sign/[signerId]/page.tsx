@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -50,6 +50,8 @@ interface SignatureRequest {
   status: string
   signers: Signer[]
   pdfViewerWidth?: number
+  updatedAt?: string
+  createdAt?: string
 }
 
 interface SignerInfo {
@@ -61,8 +63,8 @@ interface SignerInfo {
 export default function SignDocumentPage() {
   const router = useRouter()
   const params = useParams()
-  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
-  const token = searchParams.get('token')
+  const searchParams = useSearchParams()
+  const token = searchParams?.get('token')
   const signerId = typeof params?.signerId === 'string' ? params.signerId : Array.isArray(params?.signerId) ? params.signerId[0] : ''
   const [signerInfo, setSignerInfo] = useState<SignerInfo | null>(null)
   const [showSignatureModal, setShowSignatureModal] = useState(false)
@@ -85,7 +87,7 @@ export default function SignDocumentPage() {
   const isAlreadySigned = currentSigner?.status === 'SIGNED'
   
   const signaturePositions = useSignaturePositions(
-    signerInfo?.signatureRequest.signers as any || [],
+    signerInfo?.signatureRequest.signers ?? [],
     (!isAlreadySigned && (tempSignatureDataUrl || signatureDataUrl)) ? {
       signerId,
       signatureDataUrl: tempSignatureDataUrl || signatureDataUrl
@@ -93,10 +95,10 @@ export default function SignDocumentPage() {
   )
 
   useEffect(() => {
-    if (signerId) {
+    if (signerId && searchParams !== null) {
       loadSignatureData()
     }
-  }, [signerId])
+  }, [signerId, searchParams])
 
   const loadSignatureData = async () => {
     try {
@@ -107,11 +109,6 @@ export default function SignDocumentPage() {
       // Token es opcional: si está presente, usar magic link; si no, usar autenticación del usuario
       const info = await signatureApi.getSignerInfo(signerId, token || undefined) as SignerInfo
       setSignerInfo(info)
-      
-      // Si ya tiene firma capturada, mostrarla
-      if (info.signer.signatureImagePath) {
-        setSignatureDataUrl(info.signer.signatureImagePath)
-      }
       
       // Determinar el paso inicial
       if (info.signer.status === 'SIGNED') {
@@ -125,6 +122,19 @@ export default function SignDocumentPage() {
       setError(apiError.message || 'Error al cargar los datos')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const refreshSignerInfo = async () => {
+    try {
+      const info = await signatureApi.getSignerInfo(signerId, token || undefined) as SignerInfo
+      setSignerInfo(info)
+      if (info.signer.status === 'SIGNED') {
+        setSignatureDataUrl('')
+        setTempSignatureDataUrl('')
+      }
+    } catch {
+      // No borrar el mensaje de éxito si la recarga falla
     }
   }
 
@@ -152,23 +162,14 @@ export default function SignDocumentPage() {
       // Subir imagen de firma al backend
       await signatureApi.uploadSignature(signerId as string, tempSignatureDataUrl, 'draw')
       setSignatureDataUrl(tempSignatureDataUrl)
-      
+
       // Firmar directamente sin paso adicional
-      const result = await signatureApi.sign(signerId as string, '')
+      await signatureApi.sign(signerId as string, '')
       setSuccess('¡Documento firmado exitosamente!')
-      
-      // Limpiar preview para evitar duplicados
-      setTempSignatureDataUrl('')
-      
-      // Actualizar información del firmante para mostrar que está firmado
-      if (signerInfo) {
-        setSignerInfo({
-          ...signerInfo,
-          signer: { ...signerInfo.signer, status: 'SIGNED' },
-          signatureRequest: result as SignatureRequest
-        })
-      }
-      
+
+      // Recargar datos del firmante para obtener el PDF firmado actualizado
+      await refreshSignerInfo()
+
       setStep('view')
       setShowPreview(false)
     } catch (err) {
@@ -193,22 +194,12 @@ export default function SignDocumentPage() {
 
     try {
       // Firmar directamente sin OTP
-      const result = await signatureApi.sign(signerId as string, '')
+      await signatureApi.sign(signerId as string, '')
       setSuccess('¡Documento firmado exitosamente!')
-      
-      // Limpiar AMBOS estados de firma para evitar duplicados
-      setTempSignatureDataUrl('')
-      setSignatureDataUrl('')
-      
-      // Actualizar información del firmante para mostrar que está firmado
-      if (signerInfo) {
-        setSignerInfo({
-          ...signerInfo,
-          signer: { ...signerInfo.signer, status: 'SIGNED' },
-          signatureRequest: result as SignatureRequest
-        })
-      }
-      
+
+      // Recargar datos del firmante para obtener el PDF firmado actualizado
+      await refreshSignerInfo()
+
       setStep('view')
       setShowPreview(false)
     } catch (err) {
@@ -228,6 +219,13 @@ export default function SignDocumentPage() {
       setError('Error al descargar el documento firmado')
     }
   }
+
+  const fileUrl = useMemo(() => {
+    if (!signerInfo?.signatureRequest.documentId) return ''
+    const baseUrl = documentApi.getViewUrl(signerInfo.signatureRequest.documentId)
+    const cacheBuster = signerInfo.signatureRequest.updatedAt
+    return cacheBuster ? `${baseUrl}?t=${encodeURIComponent(cacheBuster)}` : baseUrl
+  }, [signerInfo?.signatureRequest.documentId, signerInfo?.signatureRequest.updatedAt])
 
   if (loading) {
     return (
@@ -269,7 +267,7 @@ export default function SignDocumentPage() {
             <Card title="Documento a Firmar">
               {signerInfo ? (
                 <PDFViewerWithSignatures
-                  fileUrl={`${documentApi.getViewUrl(signerInfo.signatureRequest.documentId)}?t=${Date.now()}`}
+                  fileUrl={fileUrl}
                   signatures={signaturePositions}
                   pdfViewerWidth={signerInfo.signatureRequest.pdfViewerWidth}
                   currentSignerId={signerId as string}

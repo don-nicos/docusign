@@ -1,6 +1,6 @@
 import { API_CONFIG } from './config'
 import { createTracedHeaders, logWithTrace } from './tracing'
-import type { ApiError } from '@/types'
+import type { ApiError, SignatureUploadResponse, SignatureVerificationResponse } from '@/types'
 
 class ApiClient {
   private getAuthToken(): string | null {
@@ -267,7 +267,7 @@ export const signatureApi = {
     }),
 
   uploadSignature: (signerId: string, signatureDataUrl: string, method?: string) =>
-    apiClient.post(`${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/signer/${signerId}/upload-signature`, {
+    apiClient.post<SignatureUploadResponse>(`${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/signer/${signerId}/upload-signature`, {
       signatureDataUrl,
       method,
     }),
@@ -277,6 +277,13 @@ export const signatureApi = {
       ? `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/signer/${signerId}/info?token=${token}`
       : `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/signer/${signerId}/info`
     return apiClient.get(url)
+  },
+
+  verifySignature: (requestId: string, signerId?: string) => {
+    const url = signerId
+      ? `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/verify/${requestId}?signerId=${signerId}`
+      : `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/verify/${requestId}`
+    return apiClient.get<SignatureVerificationResponse>(url)
   },
 
   downloadSignedPdf: async (signatureRequestId: string) => {

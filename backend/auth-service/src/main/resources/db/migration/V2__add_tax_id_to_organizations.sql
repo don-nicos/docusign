@@ -1,0 +1,2 @@
+ALTER TABLE organizations
+    ADD COLUMN IF NOT EXISTS tax_id VARCHAR(50);

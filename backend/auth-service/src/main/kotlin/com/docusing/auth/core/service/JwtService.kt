@@ -8,6 +8,7 @@ import com.docusing.auth.domain.model.UserEntity
 import java.time.Clock
 import java.time.Instant
 import java.util.Date
+import java.util.UUID
 import mu.KotlinLogging
 import org.springframework.stereotype.Service
 
@@ -40,6 +41,7 @@ class JwtService(
         val token = JWT.create()
             .withSubject(user.id.toString())
             .withClaim("type", "refresh")
+            .withJWTId(UUID.randomUUID().toString())
             .withIssuedAt(Date.from(issuedAt))
             .withExpiresAt(Date.from(expiresAt))
             .sign(algorithm)

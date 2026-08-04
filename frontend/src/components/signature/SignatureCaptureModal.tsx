@@ -16,6 +16,12 @@ interface SignatureCaptureModalProps {
 
 type SignatureMethod = 'draw' | 'type' | 'saved'
 
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  return 'Ocurrió un error al guardar la firma'
+}
+
 export function SignatureCaptureModal({
   isOpen,
   onClose,
@@ -68,8 +74,8 @@ export function SignatureCaptureModal({
       setPendingSignature('')
       setSaveName('')
       setSaveAsDefault(false)
-    } catch (err: any) {
-      alert(err.message || 'Error al guardar la firma')
+    } catch (err) {
+      alert(getErrorMessage(err))
     } finally {
       setSaving(false)
     }

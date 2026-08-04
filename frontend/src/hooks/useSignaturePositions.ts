@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { Signer } from '@/types'
+import type { SignaturePosition } from '@/types'
 import { API_CONFIG } from '@/lib/config'
 
 /**
@@ -19,20 +19,57 @@ export interface SignatureViewPosition {
 }
 
 /**
- * Hook para mapear firmantes a posiciones de firma para el visor PDF
- * Centraliza la lógica de conversión de datos del backend al formato del visor
- * 
+ * Subconjunto mínimo de datos de firmante necesario para posicionar la firma en el visor.
+ * Es flexible para aceptar tanto Signer (backend) como objetos legacy/parciales.
+ */
+interface SignerPositionSource {
+  id: string
+  email: string
+  fullName: string
+  orderIndex?: number
+  status: string
+  signatureImagePath?: string
+  signaturePositionX?: number
+  signaturePositionY?: number
+  signaturePage?: number
+  signatureWidth?: number
+  signatureHeight?: number
+  positions?: SignaturePosition[]
+  signaturePositions?: SignaturePosition[]
+}
+
+const getStatusAndImageUrl = (
+  signer: SignerPositionSource,
+  previewSignature?: { signerId: string; signatureDataUrl: string }
+): Pick<SignatureViewPosition, 'status' | 'signatureImageUrl'> => {
+  if (signer.status === 'SIGNED' && signer.signatureImagePath) {
+    return {
+      status: 'SIGNED',
+      signatureImageUrl: `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/images/${signer.signatureImagePath}?t=${Date.now()}`
+    }
+  }
+
+  if (previewSignature && previewSignature.signerId === signer.id && signer.status !== 'SIGNED') {
+    return {
+      status: 'PREVIEW',
+      signatureImageUrl: previewSignature.signatureDataUrl
+    }
+  }
+
+  return { status: 'PENDING', signatureImageUrl: undefined }
+}
+
+/**
+ * Hook para mapear firmantes a posiciones de firma para el visor PDF.
+ * Centraliza la lógica de conversión de datos del backend al formato del visor.
+ *
  * Soporta:
  * - Múltiples posiciones por firmante (nuevo sistema)
  * - Una posición por firmante (sistema legacy)
  * - Vista previa de firma temporal
- * 
- * @param signers - Lista de firmantes del backend
- * @param previewSignature - Firma temporal para vista previa (opcional)
- * @returns Array de posiciones de firma para el visor
  */
 export function useSignaturePositions(
-  signers: Signer[],
+  signers: SignerPositionSource[],
   previewSignature?: {
     signerId: string
     signatureDataUrl: string
@@ -42,28 +79,11 @@ export function useSignaturePositions(
     const result: SignatureViewPosition[] = []
 
     signers.forEach(signer => {
-      // Si tiene múltiples posiciones (nuevo sistema)
-      // El backend envía "positions", pero también soportamos "signaturePositions" por compatibilidad
+      const { status, signatureImageUrl } = getStatusAndImageUrl(signer, previewSignature)
       const signerPositions = signer.positions || signer.signaturePositions
-      
+
       if (signerPositions && signerPositions.length > 0) {
         signerPositions.forEach(pos => {
-          // Determinar estado y URL de imagen
-          let status: 'SIGNED' | 'PENDING' | 'PREVIEW' = signer.status === 'SIGNED' ? 'SIGNED' : 'PENDING'
-          let imageUrl: string | undefined
-
-          // Si está firmado, usar la imagen del servidor (prioridad)
-          if (signer.status === 'SIGNED' && signer.signatureImagePath) {
-            if (signer.signatureImagePath.includes('/')) {
-              imageUrl = `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/images/${signer.signatureImagePath}?t=${Date.now()}`
-            }
-          } 
-          // Si es vista previa para este firmante Y no está firmado aún
-          else if (previewSignature && previewSignature.signerId === signer.id && signer.status !== 'SIGNED') {
-            status = 'PREVIEW'
-            imageUrl = previewSignature.signatureDataUrl
-          }
-
           result.push({
             signerId: signer.id,
             signerName: signer.fullName,
@@ -74,26 +94,10 @@ export function useSignaturePositions(
             height: pos.height,
             page: pos.pageNumber,
             status,
-            signatureImageUrl: imageUrl
+            signatureImageUrl
           })
         })
       } else {
-        // Fallback a sistema legacy (una sola posición)
-        let status: 'SIGNED' | 'PENDING' | 'PREVIEW' = signer.status === 'SIGNED' ? 'SIGNED' : 'PENDING'
-        let imageUrl: string | undefined
-
-        // Si está firmado, usar la imagen del servidor (prioridad)
-        if (signer.status === 'SIGNED' && signer.signatureImagePath) {
-          if (signer.signatureImagePath.includes('/')) {
-            imageUrl = `${API_CONFIG.SIGNATURE_SERVICE}/api/signatures/images/${signer.signatureImagePath}?t=${Date.now()}`
-          }
-        }
-        // Si es vista previa para este firmante Y no está firmado aún
-        else if (previewSignature && previewSignature.signerId === signer.id && signer.status !== 'SIGNED') {
-          status = 'PREVIEW'
-          imageUrl = previewSignature.signatureDataUrl
-        }
-
         result.push({
           signerId: signer.id,
           signerName: signer.fullName,
@@ -104,18 +108,11 @@ export function useSignaturePositions(
           height: signer.signatureHeight || 80,
           page: signer.signaturePage || 1,
           status,
-          signatureImageUrl: imageUrl
+          signatureImageUrl
         })
       }
     })
 
     return result
   }, [signers, previewSignature])
-}
-
-/**
- * Hook simplificado para cuando solo necesitas las posiciones sin vista previa
- */
-export function useSignaturePositionsSimple(signers: Signer[]) {
-  return useSignaturePositions(signers)
 }

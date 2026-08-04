@@ -18,6 +18,11 @@ export interface SavedSignature {
   createdAt?: string
 }
 
+export interface SignatureUploadResponse {
+  message: string
+  signatureImagePath: string
+}
+
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
@@ -194,4 +199,23 @@ export interface SubscriptionWithChargeResponse {
 export interface SubscriptionAccessStatusResponse {
   active: boolean
   currentPeriodEnd?: string | null
+}
+
+export interface SignerVerificationResponse {
+  signerId: string
+  fullName: string
+  email: string
+  status: string
+  signedAt?: string | null
+  authenticationMethod?: string | null
+  ipAddress?: string | null
+}
+
+export interface SignatureVerificationResponse {
+  requestId: string
+  documentTitle: string
+  status: string
+  documentHash: string | null
+  completedAt?: string | null
+  signers: SignerVerificationResponse[]
 }

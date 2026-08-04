@@ -17,16 +17,22 @@ class SavedSignatureController(
 ) {
     @GetMapping
     fun getUserSignatures(
-        @AuthenticationPrincipal user: AuthenticatedUser
+        @AuthenticationPrincipal user: AuthenticatedUser?
     ): ResponseEntity<List<SavedSignatureResponse>> {
+        if (user == null) {
+            return ResponseEntity.ok(emptyList())
+        }
         val signatures = savedSignatureService.getUserSignatures(user.userId)
         return ResponseEntity.ok(signatures)
     }
 
     @GetMapping("/default")
     fun getDefaultSignature(
-        @AuthenticationPrincipal user: AuthenticatedUser
+        @AuthenticationPrincipal user: AuthenticatedUser?
     ): ResponseEntity<SavedSignatureResponse> {
+        if (user == null) {
+            return ResponseEntity.notFound().build()
+        }
         val signature = savedSignatureService.getDefaultSignature(user.userId)
         return if (signature != null) {
             ResponseEntity.ok(signature)
