@@ -12,7 +12,7 @@ import type { Document, SignatureRequest, ApiError } from '@/types'
 export default function DocumentDetailPage() {
   const params = useParams()
   const id = typeof params?.id === 'string' ? params.id : Array.isArray(params?.id) ? params.id[0] : ''
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const router = useRouter()
   const [document, setDocument] = useState<Document | null>(null)
   const [signatures, setSignatures] = useState<SignatureRequest[]>([])
@@ -20,15 +20,15 @@ export default function DocumentDetailPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.push('/auth/login')
       return
     }
 
-    if (id) {
+    if (id && !authLoading && isAuthenticated) {
       loadDocument()
     }
-  }, [id, isAuthenticated])
+  }, [id, isAuthenticated, authLoading])
 
   const loadDocument = async () => {
     try {
@@ -77,7 +77,7 @@ export default function DocumentDetailPage() {
     window.open(originalUrl, '_blank')
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>

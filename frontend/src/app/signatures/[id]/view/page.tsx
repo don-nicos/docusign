@@ -14,23 +14,23 @@ export default function ViewSignaturePage() {
   const params = useParams()
   const id = typeof params?.id === 'string' ? params.id : Array.isArray(params?.id) ? params.id[0] : ''
   const router = useRouter()
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, loading: authLoading } = useAuth()
   const [signature, setSignature] = useState<SignatureRequest | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   // Proteger ruta: redirigir si no está autenticado
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.push('/auth/login?redirect=/signatures/' + id + '/view')
     }
-  }, [isAuthenticated, router, id])
+  }, [isAuthenticated, router, id, authLoading])
 
   useEffect(() => {
-    if (id && isAuthenticated) {
+    if (id && !authLoading && isAuthenticated) {
       loadSignature()
     }
-  }, [id, isAuthenticated])
+  }, [id, isAuthenticated, authLoading])
 
   const loadSignature = async () => {
     try {
@@ -85,7 +85,7 @@ export default function ViewSignaturePage() {
   console.log('🔍 DEBUG - Posiciones generadas:', signatures.length)
   console.log('🔍 DEBUG - Datos completos:', JSON.stringify(signatures, null, 2))
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>

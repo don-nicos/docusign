@@ -36,7 +36,7 @@ interface SignatureField {
 export default function CreateSignaturePage() {
   const params = useParams()
   const id = typeof params?.id === 'string' ? params.id : Array.isArray(params?.id) ? params.id[0] : ''
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const router = useRouter()
   const [document, setDocument] = useState<Document | null>(null)
   const [loadingAccess, setLoadingAccess] = useState(true)
@@ -95,17 +95,19 @@ export default function CreateSignaturePage() {
   }, [id, setError, setDocument, setTitle, setLoadingDoc])
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.push('/auth/login')
       return
     }
 
+    if (authLoading) return
+
     loadSubscriptionAccess()
 
-    if (id) {
+    if (id && isAuthenticated) {
       loadDocument()
     }
-  }, [id, isAuthenticated, loadDocument, loadSubscriptionAccess, router])
+  }, [id, isAuthenticated, authLoading, loadDocument, loadSubscriptionAccess, router])
 
   const addSigner = () => {
     setSigners([...signers, { email: '', fullName: '' }])
@@ -244,7 +246,7 @@ export default function CreateSignaturePage() {
     }
   }
 
-  if (loadingDoc || loadingAccess) {
+  if (authLoading || loadingDoc || loadingAccess) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
